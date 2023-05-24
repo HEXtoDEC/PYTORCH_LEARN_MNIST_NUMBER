@@ -19,13 +19,13 @@ training_data = datasets.MNIST(
 # 准备测试集
 test_data = datasets.MNIST(
     root="./data/",
-    train=False,        # 注意我们这里设置了train=False
+    train=False,        # 注意这里设置了False
     download=False,
     transform=ToTensor(),
 )
 
 # 创建一个读取MNIST二进制文件的函数
-def read_images(filename='./data/MNIST/raw/train-images-idx3-ubyte'):
+def read_images(filename='.\\data\\MNIST\\raw\\train-images-idx3-ubyte'):
     with open(filename, 'rb') as f:
         magic, num, rows, cols = struct.unpack('>IIII', f.read(16)) # 2051 60000 28 28
         '''
@@ -48,7 +48,8 @@ def read_images(filename='./data/MNIST/raw/train-images-idx3-ubyte'):
 dim = 1
 lr = 1e-4
 epochs = 100
-batch_size = 1024
+batch_size = 1
+
 
 # 定义一个神经网络类，继承自nn.Module
 class NeuralNetwork(nn.Module):
@@ -58,12 +59,17 @@ class NeuralNetwork(nn.Module):
         self.flatten = nn.Flatten()
         # 定义一个线性ReLU堆栈，包括两个线性层和ReLU激活层，以及一个输出层
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28*28, 512),
+            nn.Linear(28 * 28, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Linear(512, 10),
-            nn.LogSoftmax(dim=1)
+            nn.LogSoftmax(dim)
         )
 
     def forward(self, x):
@@ -74,26 +80,27 @@ class NeuralNetwork(nn.Module):
 
 
 # 数据集准备
-train_dataloader = DataLoader(training_data, batch_size=1024)
-test_dataloader = DataLoader(test_data, batch_size=1024)
+train_dataloader = DataLoader(training_data, batch_size)
+test_dataloader = DataLoader(test_data, batch_size)
 
 # 初始化模型，损失函数，优化器，并将模型移动到相应设备（CPU或CUDA设备）
 # 如果有可用的CUDA设备，将设备设置为'cuda'，否则设置为'cpu'
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model = NeuralNetwork().to(device)
 loss_fn = nn.NLLLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=1e-4)
+optimizer = torch.optim.SGD(model.parameters(), lr)
 
 
 # 定义训练函数
-def train(dataloader=train_dataloader, model=model, loss_fn=loss_fn, optimizer=optimizer):
+def train():
+    dataloader = train_dataloader
     size = len(dataloader.dataset)
-    for batch, (X, y) in enumerate(dataloader):
+    for batch, (x, y) in enumerate(dataloader):
         # 将数据移动到相应设备（CPU或CUDA设备）
-        X, y = X.to(device), y.to(device)
+        x, y = x.to(device), y.to(device)
 
         # 计算模型预测结果和损失
-        pred = model(X)
+        pred = model(x)
         loss = loss_fn(pred, y)
 
         # 反向传播和优化
@@ -102,35 +109,32 @@ def train(dataloader=train_dataloader, model=model, loss_fn=loss_fn, optimizer=o
         optimizer.step()
 
         # 计算已经处理的样本数量
-        current = batch * len(X)
+        current = batch * len(x)
 
         # 打印训练进度
-        if batch % 8 == 0:
-            loss = loss.item()
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
-            print(f"-------------------------------")
+        loss = loss.item()
+        print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
 
 def train_frequency():
     for t in range(epochs):
+        print(f"-------------------------------")
         print(f"Epoch {t + 1}")
         train()
-    # 保存模型参数
+    # 保存模型
     torch.save(model.state_dict(), 'model.pth')
 
-# 评估和推理的加载模型
-model = NeuralNetwork().to(device)
-model.load_state_dict(torch.load('model.pth'))
+
 # 评估模式
 def test(dataloader, model):
     size = len(dataloader.dataset)
     model.eval()
     test_loss, correct = 0, 0
     with torch.no_grad():
-        for X, y in dataloader:
-            X, y = X.to(device), y.to(device)
-            pred = model(X)
-            test_loss += loss_fn(pred, y).item() * len(X)
+        for x, y in dataloader:
+            x, y = x.to(device), y.to(device)
+            pred = model(x)
+            test_loss += loss_fn(pred, y).item() * len(x)
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
     test_loss /= len(dataloader.dataset)
     correct /= size
@@ -141,10 +145,10 @@ def test(dataloader, model):
 def inference(images=read_images(), model=model):
     model.eval()
     # 60000是size = len(dataloader.dataset)
-    r_num = random.randint(0, 60000)
+    r_num = random.randint(0, 60000-1)
     images = images[r_num]
     # 读取到的 image 是一个 NumPy 数组，形状为 [28, 28]，包含了你的图像
-    # 我们需要将其转换为 PyTorch 张量，并添加额外的维度
+    # 将其转换为 PyTorch tensor，并添加额外的维度
     image_tensor = torch.from_numpy(images).float().unsqueeze(0).unsqueeze(0)
     # 确保模型和输入数据在同一设备上
     image_tensor = image_tensor.to(device)
@@ -154,12 +158,15 @@ def inference(images=read_images(), model=model):
         output = model(image_tensor)
 
     # 获取预测结果
-    _, predicted = torch.max(output, dim=1)
+    _, predicted = torch.max(output, dim)
     print("数字是：", predicted.item())
     plt.imshow(images)
     plt.show()
 
-
+# 训练
 train_frequency()
-# test(test_dataloader, model)
-# inference()
+# 验证
+model.load_state_dict(torch.load('model.pth'))
+test(test_dataloader, model)
+# 推理
+inference()
