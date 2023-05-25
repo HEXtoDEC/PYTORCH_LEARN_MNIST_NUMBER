@@ -49,7 +49,7 @@ def read_images(filename='.\\data\\MNIST\\raw\\train-images-idx3-ubyte'):
 dim = 1         # 指定LogSoftmax函数的维度
 lr = 1e-4       # 学习率，用于在训练过程中更新网络权重
 epochs = 100    # 训练的周期数，每个周期会对整个数据集进行一次训练
-batch_size = 5  # 批处理大小，每次训练会取出batch_size数量的数据进行训练
+batch_size = 2  # 批处理大小，每次训练会取出batch_size数量的数据进行训练
 
 # 全连接线性层
 # 定义一个神经网络类，继承自nn.Module，这是一个深度神经网络结构，它由多个线性层和激活层组成，通过这些层的堆叠，可以学习到输入数据中的复杂模式。
@@ -96,19 +96,18 @@ class ConvolutionalNetwork(nn.Module):
     def __init__(self):
         # 首先调用父类的构造函数，用于自己构造自己。
         super(ConvolutionalNetwork, self).__init__()
-
-        # 首先定义一个Sequential模型，这个模型可以按顺序执行一系列的神经网络层
+        # 定义一个Sequential模型，这个模型可以按顺序执行一系列的神经网络层
         # 这里定义了两个卷积层，每个卷积层后面都跟着一个BatchNorm层和ReLU激活函数，以及一个MaxPool层
         # 卷积层可以看作是一个滤波器，可以在输入图片上滑动，提取图片的局部特征
         # BatchNorm层可以加速神经网络的训练，它会对每个小批量的数据进行归一化操作，使得数据的分布更加稳定
         # ReLU激活函数可以增加神经网络的非线性，使得神经网络可以拟合更复杂的函数
         # MaxPool层可以进行下采样操作，减少数据的维度，同时保留最重要的特征
         self.conv_relu_stack = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),   # 输入通道数为1，输出通道数为32，卷积核大小为3x3，步长为1，填充为1
+            nn.Conv2d(1, 32, kernel_size=6, stride=1, padding=1),   # 输入通道数为1，输出通道数为32，卷积核大小为6x6，步长为1，填充为1
             nn.BatchNorm2d(32),                                     # 对32个通道的数据进行归一化
             nn.ReLU(),                                              # ReLU激活函数
             nn.MaxPool2d(kernel_size=2, stride=2),                  # 最大池化，池化核大小为2x2，步长为2
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 输入通道数为32，输出通道数为64，卷积核大小为3x3，步长为1，填充为1
+            nn.Conv2d(32, 64, kernel_size=6, stride=1, padding=1),  # 输入通道数为32，输出通道数为64，卷积核大小为6x6，步长为1，填充为1
             nn.BatchNorm2d(64),                                     # 对64个通道的数据进行归一化
             nn.ReLU(),                                              # ReLU激活函数
             nn.MaxPool2d(kernel_size=2, stride=2),                  # 最大池化，池化核大小为2x2，步长为2
@@ -117,7 +116,7 @@ class ConvolutionalNetwork(nn.Module):
         # 全连接层可以看作是一个普通的神经网络，它将所有的输入连接到所有的输出
         # 这里有两个全连接层，第一个全连接层的输出大小为512，第二个全连接层的输出大小为10，因为假设有10个类别
         self.fc = nn.Sequential(
-            nn.Linear(64 * 7 * 7, 512),     # 输入大小为64*7*7，输出大小为512
+            nn.Linear(64 * 4 * 4, 512),     # 输入大小为64*4*4，输出大小为512
             nn.BatchNorm1d(512),            # 对512个特征进行归一化
             nn.ReLU(),                      # ReLU激活函数
             nn.Linear(512, 10),             # 输入大小为512，输出大小为10
@@ -128,10 +127,12 @@ class ConvolutionalNetwork(nn.Module):
         # 在forward函数中，定义了模型的前向传播过程
         # 首先将输入数据送入卷积层
         x = self.conv_relu_stack(x)
+        # print("Size after conv_relu_stack: ", x.size())  # print conv_relu_stack size
         # 然后需要将数据展平（flatten），因为全连接层只能处理一维的数据
         # 这里使用view函数将数据展平，第一个维度保留不变（这个维度是批量大小），其余的维度合并为一维
         x = x.view(x.size(0), -1)
         # 然后将展平的数据送入全连接层
+        # print("Size after flattening: ", x.size())  # print flattening size
         x = self.fc(x)
         # 最后，返回网络的输出
         return x
@@ -204,7 +205,8 @@ def train_frequency():
 
 
 # 评估模式
-def test(dataloader):
+def test():
+    dataloader = test_dataloader
     size = len(dataloader.dataset)
     model.eval()
     test_loss, correct = 0, 0
@@ -220,8 +222,9 @@ def test(dataloader):
 
 
 # 推理模式
-def inference(images=read_images(), model=model):
+def inference():
     model.eval()
+    images = read_images()
     # 60000是size = len(dataloader.dataset)
     r_num = random.randint(0, 60000-1)
     images = images[r_num]
@@ -241,11 +244,12 @@ def inference(images=read_images(), model=model):
     plt.imshow(images)
     plt.show()
 
+
 # 训练
-train_frequency()
+# train_frequency()
 # CMD下执行 tensorboard --logdir=runs 启动面板
 # 验证
 model.load_state_dict(torch.load('model.pth'))
-test(test_dataloader, model)
+test()
 # 推理
 inference()
