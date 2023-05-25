@@ -144,17 +144,20 @@ test_dataloader = DataLoader(test_data, batch_size)
 # 初始化模型，损失函数，优化器，并将模型移动到相应设备（CPU或CUDA设备）
 # 如果有可用的CUDA设备，将设备设置为'cuda'，否则设置为'cpu'
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-# model = NeuralNetwork().to(device) # 全连接线性
 model = ConvolutionalNetwork().to(device) # CNN卷积
 loss_fn = nn.NLLLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr)
 
-# 添加钩子函数和定义一部字典来存储激活
+# 添加钩子函数并定义一个字典来存储激活
 activations = {}
 def forward_hook(name):
     def hook(module, input, output):
         activations[name] = output.detach()
     return hook
+
+# 在开始训练之前注册钩子
+for name, module in model.named_modules():
+    module.register_forward_hook(forward_hook(name))
 
 # 定义训练函数
 def train():
@@ -179,10 +182,6 @@ def train():
         # 打印训练进度
         loss = loss.item()
         print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
-        # 注册钩子
-        for name, module in model.named_modules():
-            module.register_forward_hook(forward_hook(name))
-
 
 def train_frequency():
     writer = SummaryWriter()
@@ -193,13 +192,14 @@ def train_frequency():
         # 在每个epoch结束时，向TensorBoard添加激活
         for name, activation in activations.items():
             writer.add_histogram(f'{name}.activation', activation, t)
+            activation.clear()  # 清空激活值
         for name, weight in model.named_parameters():
             writer.add_histogram(name, weight, t)
             writer.add_histogram(f'{name}.grad', weight.grad, t)
+        activations.clear()  # 清空激活值
     writer.close()
     # 保存模型
     torch.save(model.state_dict(), 'model.pth')
-
 
 
 # 评估模式
