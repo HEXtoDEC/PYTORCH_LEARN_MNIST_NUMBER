@@ -7,6 +7,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
+from torch.utils.tensorboard import SummaryWriter
 
 # 下载并加载训练数据
 training_data = datasets.MNIST(
@@ -48,7 +49,7 @@ def read_images(filename='.\\data\\MNIST\\raw\\train-images-idx3-ubyte'):
 dim = 1         # 指定LogSoftmax函数的维度
 lr = 1e-4       # 学习率，用于在训练过程中更新网络权重
 epochs = 100    # 训练的周期数，每个周期会对整个数据集进行一次训练
-batch_size = 1  # 批处理大小，每次训练会取出batch_size数量的数据进行训练
+batch_size = 5  # 批处理大小，每次训练会取出batch_size数量的数据进行训练
 
 
 # 定义一个神经网络类，继承自nn.Module
@@ -60,38 +61,86 @@ batch_size = 1  # 批处理大小，每次训练会取出batch_size数量的数�
 ReLU（Rectified Linear Unit）激活函数在神经网络中用于引入非线性。因为线性操作无法模拟复杂的数据分布，通过ReLU等激活函数，可以引入非线性，让神经网络有能力学习并模拟更复杂的数据分布。
 最后的输出层使用了LogSoftmax作为激活函数，这是因为希望网络的输出可以表示为各个类别的概率。Softmax函数可以将一组任意的实数转化为一组概率分布，LogSoftmax则是对Softmax的输出取对数。在许多情况下，使用LogSoftmax可以提高数值稳定性。
 '''
-class NeuralNetwork(nn.Module):
-    def __init__(self):
-        super(NeuralNetwork, self).__init__()
-        # 定义一个Flatten层，将每个28x28的图片数据转化为784的向量，https://pytorch.org/docs/stable/generated/torch.flatten.html
-        # 这一步是为了将二维的图片数据转化为一维，以便进行线性变换
-        self.flatten = nn.Flatten()
 
-        # 定义一个线性ReLU堆栈，包括两个线性层和ReLU激活层，以及一个输出层
-        # 线性层（nn.Linear）是神经网络的基础组成单元，用于实现线性变换，https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
-        # ReLU激活函数用于引入非线性，使得神经网络可以拟合更复杂的函数
-        # 批量归一化层（nn.BatchNorm1d）用于进行特征的归一化处理，可以加速网络训练，提高模型的泛化能力
-        # LogSoftmax用于输出层，因为在多分类问题中，一般希望网络的输出可以表示为各个类别的概率
-        self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28 * 28, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, 10),
-            nn.LogSoftmax(dim)
+# 全连接线性层
+# class NeuralNetwork(nn.Module):
+#     def __init__(self):
+#         super(NeuralNetwork, self).__init__()
+#         # 定义一个Flatten层，将每个28x28的图片数据转化为784的向量，https://pytorch.org/docs/stable/generated/torch.flatten.html
+#         # 这一步是为了将二维的图片数据转化为一维，以便进行线性变换
+#         self.flatten = nn.Flatten()
+#
+#         # 定义一个线性ReLU堆栈，包括两个线性层和ReLU激活层，以及一个输出层
+#         # 线性层（nn.Linear）是神经网络的基础组成单元，用于实现线性变换，https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
+#         # ReLU激活函数用于引入非线性，使得神经网络可以拟合更复杂的函数
+#         # 批量归一化层（nn.BatchNorm1d）用于进行特征的归一化处理，可以加速网络训练，提高模型的泛化能力
+#         # LogSoftmax用于输出层，因为在多分类问题中，一般希望网络的输出可以表示为各个类别的概率
+#         self.linear_relu_stack = nn.Sequential(
+#             nn.Linear(28 * 28, 512),
+#             nn.BatchNorm1d(512),
+#             nn.ReLU(),
+#             nn.Linear(512, 512),
+#             nn.BatchNorm1d(512),
+#             nn.ReLU(),
+#             nn.Linear(512, 512),
+#             nn.BatchNorm1d(512),
+#             nn.ReLU(),
+#             nn.Linear(512, 10),
+#             nn.LogSoftmax(dim)
+#         )
+#
+#     def forward(self, x):
+#         # 在forward函数中，首先进行Flatten操作，然后通过线性ReLU堆栈进行计算
+#         # 这个过程就是神经网络的前向传播过程，输入的数据会按照定义的层的顺序，依次进行计算，最后输出预测结果
+#         x = self.flatten(x)
+#         logits = self.linear_relu_stack(x)
+#         return logits
+
+# CNN卷积层
+class ConvolutionalNetwork(nn.Module):
+    def __init__(self):
+        # 首先调用父类的构造函数，用于自己构造自己。
+        super(ConvolutionalNetwork, self).__init__()
+
+        # 首先定义一个Sequential模型，这个模型可以按顺序执行一系列的神经网络层
+        # 这里定义了两个卷积层，每个卷积层后面都跟着一个BatchNorm层和ReLU激活函数，以及一个MaxPool层
+        # 卷积层可以看作是一个滤波器，可以在输入图片上滑动，提取图片的局部特征
+        # BatchNorm层可以加速神经网络的训练，它会对每个小批量的数据进行归一化操作，使得数据的分布更加稳定
+        # ReLU激活函数可以增加神经网络的非线性，使得神经网络可以拟合更复杂的函数
+        # MaxPool层可以进行下采样操作，减少数据的维度，同时保留最重要的特征
+        self.conv_relu_stack = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),   # 输入通道数为1，输出通道数为32，卷积核大小为3x3，步长为1，填充为1
+            nn.BatchNorm2d(32),                                     # 对32个通道的数据进行归一化
+            nn.ReLU(),                                              # ReLU激活函数
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # 最大池化，池化核大小为2x2，步长为2
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 输入通道数为32，输出通道数为64，卷积核大小为3x3，步长为1，填充为1
+            nn.BatchNorm2d(64),                                     # 对64个通道的数据进行归一化
+            nn.ReLU(),                                              # ReLU激活函数
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # 最大池化，池化核大小为2x2，步长为2
+        )
+        # 然后定义一个全连接层，用于将卷积层提取的特征进行分类
+        # 全连接层可以看作是一个普通的神经网络，它将所有的输入连接到所有的输出
+        # 这里有两个全连接层，第一个全连接层的输出大小为512，第二个全连接层的输出大小为10，因为假设有10个类别
+        self.fc = nn.Sequential(
+            nn.Linear(64 * 7 * 7, 512),     # 输入大小为64*7*7，输出大小为512
+            nn.BatchNorm1d(512),            # 对512个特征进行归一化
+            nn.ReLU(),                      # ReLU激活函数
+            nn.Linear(512, 10),             # 输入大小为512，输出大小为10
+            nn.LogSoftmax(dim=1)            # LogSoftmax激活函数，可以将网络的输出转化为各个类别的概率
         )
 
     def forward(self, x):
-        # 在forward函数中，首先进行Flatten操作，然后通过线性ReLU堆栈进行计算
-        # 这个过程就是神经网络的前向传播过程，输入的数据会按照定义的层的顺序，依次进行计算，最后输出预测结果
-        x = self.flatten(x)
-        logits = self.linear_relu_stack(x)
-        return logits
+        # 在forward函数中，定义了模型的前向传播过程
+        # 首先将输入数据送入卷积层
+        x = self.conv_relu_stack(x)
+        # 然后需要将数据展平（flatten），因为全连接层只能处理一维的数据
+        # 这里使用view函数将数据展平，第一个维度保留不变（这个维度是批量大小），其余的维度合并为一维
+        x = x.view(x.size(0), -1)
+        # 然后将展平的数据送入全连接层
+        x = self.fc(x)
+        # 最后，返回网络的输出
+        return x
+
 
 # 数据集准备
 train_dataloader = DataLoader(training_data, batch_size)
@@ -100,10 +149,17 @@ test_dataloader = DataLoader(test_data, batch_size)
 # 初始化模型，损失函数，优化器，并将模型移动到相应设备（CPU或CUDA设备）
 # 如果有可用的CUDA设备，将设备设置为'cuda'，否则设置为'cpu'
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-model = NeuralNetwork().to(device)
+# model = NeuralNetwork().to(device) # 全连接线性
+model = ConvolutionalNetwork().to(device) # CNN卷积
 loss_fn = nn.NLLLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr)
 
+# 添加钩子函数和定义一部字典来存储激活
+activations = {}
+def forward_hook(name):
+    def hook(module, input, output):
+        activations[name] = output.detach()
+    return hook
 
 # 定义训练函数
 def train():
@@ -128,15 +184,27 @@ def train():
         # 打印训练进度
         loss = loss.item()
         print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        # 注册钩子
+        for name, module in model.named_modules():
+            module.register_forward_hook(forward_hook(name))
 
 
 def train_frequency():
+    writer = SummaryWriter()
     for t in range(epochs):
         print(f"-------------------------------")
         print(f"Epoch {t + 1}")
         train()
+        # 在每个epoch结束时，向TensorBoard添加激活
+        for name, activation in activations.items():
+            writer.add_histogram(f'{name}.activation', activation, t)
+        for name, weight in model.named_parameters():
+            writer.add_histogram(name, weight, t)
+            writer.add_histogram(f'{name}.grad', weight.grad, t)
+    writer.close()
     # 保存模型
     torch.save(model.state_dict(), 'model.pth')
+
 
 
 # 评估模式
@@ -178,7 +246,8 @@ def inference(images=read_images(), model=model):
     plt.show()
 
 # 训练
-# train_frequency()
+train_frequency()
+# CMD下执行 tensorboard --logdir=runs 启动面板
 # 验证
 model.load_state_dict(torch.load('model.pth'))
 test(test_dataloader, model)
