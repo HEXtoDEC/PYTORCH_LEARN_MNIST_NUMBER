@@ -183,7 +183,9 @@ def train():
         loss = loss.item()
         print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
+
 def train_frequency():
+    global activations
     writer = SummaryWriter()
     for t in range(epochs):
         print(f"-------------------------------")
@@ -192,18 +194,17 @@ def train_frequency():
         # 在每个epoch结束时，向TensorBoard添加激活
         for name, activation in activations.items():
             writer.add_histogram(f'{name}.activation', activation, t)
-            activation.clear()  # 清空激活值
         for name, weight in model.named_parameters():
             writer.add_histogram(name, weight, t)
             writer.add_histogram(f'{name}.grad', weight.grad, t)
-        activations.clear()  # 清空激活值
+        activations = {}  # Reset activations
     writer.close()
     # 保存模型
     torch.save(model.state_dict(), 'model.pth')
 
 
 # 评估模式
-def test(dataloader, model):
+def test(dataloader):
     size = len(dataloader.dataset)
     model.eval()
     test_loss, correct = 0, 0
